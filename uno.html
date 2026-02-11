@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNO Tournament Pro - Ultimate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            background: radial-gradient(circle at center, #1e293b, #020617);
+            font-family: 'Outfit', sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+
+        /* Table Background */
+        .board {
+            height: 100vh;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            align-items: center;
+            padding: 20px;
+            perspective: 1000px;
+        }
+
+        /* CARDS - Fanned Layout */
+        .card {
+            width: 90px;
+            height: 140px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 28px;
+            border: 3px solid white;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            user-select: none;
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.3);
+        }
+
+        .card:hover {
+            transform: translateY(-40px) scale(1.2) rotate(0deg) !important;
+            z-index: 100 !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+        }
+
+        .card.red { background: linear-gradient(135deg, #ef4444, #991b1b); }
+        .card.blue { background: linear-gradient(135deg, #3b82f6, #1e3a8a); }
+        .card.green { background: linear-gradient(135deg, #22c55e, #14532d); }
+        .card.yellow { background: linear-gradient(135deg, #eab308, #854d0e); color: #422006; }
+        .card.black { background: linear-gradient(135deg, #334155, #000000); }
+        .card.back { 
+            background: repeating-linear-gradient(45deg, #1e293b, #1e293b 10px, #0f172a 10px, #0f172a 20px);
+            border-color: #334155;
+        }
+
+        .hand {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 180px;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Center Table */
+        .center-pile {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 50px;
+            position: relative;
+        }
+
+        .indicator-ring {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 4px dashed rgba(255,255,255,0.1);
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .uno-btn {
+            background: linear-gradient(to bottom, #fde047, #ca8a04);
+            color: black;
+            font-weight: 900;
+            padding: 10px 20px;
+            border-radius: 99px;
+            box-shadow: 0 0 20px rgba(234, 179, 8, 0.4);
+            animation: pulse 1.5s infinite;
+            display: none;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); box-shadow: 0 0 30px rgba(234, 179, 8, 0.6); }
+            100% { transform: scale(1); }
+        }
+
+        .speech-bubble {
+            background: white;
+            color: black;
+            padding: 8px 16px;
+            border-radius: 16px;
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 50;
+            width: max-content;
+            max-width: 200px;
+        }
+
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            margin-left: -8px;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid white;
+        }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Modern Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="board">
+    <!-- AI SECTION -->
+    <div class="flex flex-col items-center">
+        <div class="relative">
+            <div id="ai-bubble" class="speech-bubble">Thinking...</div>
+            <div id="p2" class="hand"></div>
+        </div>
+        <div class="mt-2 text-slate-400 text-xs uppercase tracking-widest font-bold">Opponent (AI)</div>
+    </div>
+
+    <!-- CENTER PILE -->
+    <div class="center-pile">
+        <div class="indicator-ring" id="turn-ring"></div>
+        
+        <div id="deck" class="card back flex flex-col items-center justify-center gap-1" onclick="drawFromDeck()">
+            <span class="text-[10px] opacity-50 uppercase">Draw</span>
+            <div class="text-2xl">U</div>
+        </div>
+
+        <div id="discard-container" class="relative">
+            <div id="discard" class="card"></div>
+            <div id="color-name" class="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] uppercase font-black opacity-50"></div>
+        </div>
+
+        <div class="flex flex-col gap-4 items-center absolute right-[-200px] hidden md:flex">
+            <button class="bg-slate-800 hover:bg-slate-700 p-3 rounded-full transition" onclick="getStrategyAdvice()">
+                <span id="advice-icon">💡</span>
+                <div id="advice-loader" class="loader hidden"></div>
+            </button>
+            <button class="bg-slate-800 hover:bg-slate-700 p-3 rounded-full transition" onclick="resetMatch()">🔄</button>
+        </div>
+    </div>
+
+    <!-- PLAYER SECTION -->
+    <div class="flex flex-col items-center w-full">
+        <div class="flex gap-4 mb-4 items-center">
+            <button id="uno-btn" class="uno-btn" onclick="sayUno()">UNO!</button>
+            <div id="status" class="bg-white/5 border border-white/10 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest">
+                Game Ready
+            </div>
+            <div id="score-display" class="text-yellow-500 font-black text-lg">P1: 0 | AI: 0</div>
+        </div>
+        <div id="p1" class="hand"></div>
+    </div>
+</div>
+
+<!-- COLOR PICKER -->
+<div id="colorPicker" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] hidden items-center justify-center">
+    <div class="bg-slate-900 p-8 rounded-3xl border border-white/10 text-center">
+        <h2 class="text-2xl font-black mb-6 uppercase">Choose Color</h2>
+        <div class="grid grid-cols-2 gap-4">
+            <div class="w-20 h-20 rounded-2xl bg-red-500 cursor-pointer hover:scale-110 transition border-4 border-white/20" onclick="setColor('red')"></div>
+            <div class="w-20 h-20 rounded-2xl bg-blue-500 cursor-pointer hover:scale-110 transition border-4 border-white/20" onclick="setColor('blue')"></div>
+            <div class="w-20 h-20 rounded-2xl bg-green-500 cursor-pointer hover:scale-110 transition border-4 border-white/20" onclick="setColor('green')"></div>
+            <div class="w-20 h-20 rounded-2xl bg-yellow-400 cursor-pointer hover:scale-110 transition border-4 border-white/20" onclick="setColor('yellow')"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ================= GEMINI API HELPERS ================= */
+const apiKey = "";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+async function callGemini(prompt, systemInstruction) {
+    if(!apiKey) return null;
+    let delay = 1000;
+    for (let i = 0; i < 3; i++) {
+        try {
+            const response = await fetch(GEMINI_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] }
+                })
+            });
+            const data = await response.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text;
+        } catch (e) {
+            await new Promise(r => setTimeout(r, delay));
+            delay *= 2;
+        }
+    }
+    return null;
+}
+
+/* ================= GAME STATE ================= */
+const COLORS = ["red", "blue", "green", "yellow"];
+const VALUES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "S", "R", "D2"];
+let deck = [], discard = [], players = [[], []];
+let current = 0;
+let currentColor = "";
+let scores = JSON.parse(localStorage.getItem('unoScores')) || [0, 0];
+let awaitingColor = false;
+let gameActive = true;
+let hasDeclaredUno = [false, false];
+
+/* ================= INIT ================= */
+function init() {
+    deck = [];
+    COLORS.forEach(c => {
+        VALUES.forEach(v => {
+            deck.push({ color: c, value: v });
+            if (v !== "0") deck.push({ color: c, value: v });
+        });
+    });
+    // Wilds
+    for (let i = 0; i < 4; i++) {
+        deck.push({ color: "black", value: "W" });
+        deck.push({ color: "black", value: "W4" });
+    }
+    deck.sort(() => Math.random() - 0.5);
+
+    players = [[], []];
+    for (let i = 0; i < 7; i++) {
+        players[0].push(deck.pop());
+        players[1].push(deck.pop());
+    }
+
+    let first = deck.pop();
+    while (first.color === "black") {
+        deck.unshift(first);
+        first = deck.pop();
+    }
+    discard = [first];
+    currentColor = first.color;
+    current = 0;
+    gameActive = true;
+    hasDeclaredUno = [false, false];
+
+    updateUI();
+}
+
+/* ================= UI RENDERING ================= */
+function updateUI() {
+    document.getElementById("score-display").innerText = `P1: ${scores[0]} | AI: ${scores[1]}`;
+    document.getElementById("status").innerText = current === 0 ? "Your Turn" : "AI Thinking...";
+    document.getElementById("status").classList.toggle("bg-yellow-500/20", current === 0);
+    document.getElementById("status").classList.toggle("text-yellow-500", current === 0);
+
+    renderHand(0, "p1");
+    renderHand(1, "p2");
+
+    const top = discard[discard.length - 1];
+    const dEl = document.getElementById("discard");
+    dEl.className = `card ${top.color}`;
+    dEl.innerText = top.value;
+
+    document.getElementById("color-name").innerText = currentColor;
+    document.getElementById("turn-ring").style.borderColor = currentColor === 'yellow' ? '#facc15' : 
+                                                            currentColor === 'red' ? '#ef4444' : 
+                                                            currentColor === 'blue' ? '#3b82f6' : '#22c55e';
+
+    // UNO Button
+    const unoBtn = document.getElementById("uno-btn");
+    unoBtn.style.display = (players[0].length === 2 && current === 0) ? "block" : "none";
+
+    if (gameActive && current === 1 && !awaitingColor) {
+        setTimeout(aiTurn, 1500);
+    }
+}
+
+function renderHand(pIdx, containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    const cards = players[pIdx];
+    const total = cards.length;
+
+    cards.forEach((card, i) => {
+        const el = document.createElement("div");
+        const offset = (i - (total - 1) / 2) * 40; // Spacing
+        const rotation = (i - (total - 1) / 2) * 5; // Fanning effect
+
+        if (pIdx === 1) {
+            el.className = "card back";
+            el.style.position = "absolute";
+            el.style.left = `calc(50% + ${offset}px)`;
+            el.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+        } else {
+            el.className = `card ${card.color}`;
+            el.innerText = card.value;
+            el.style.position = "absolute";
+            el.style.left = `calc(50% + ${offset}px)`;
+            el.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+            el.onclick = () => playCard(0, i);
+        }
+        el.style.zIndex = i;
+        container.appendChild(el);
+    });
+}
+
+/* ================= GAME LOGIC ================= */
+function valid(card) {
+    const top = discard[discard.length - 1];
+    if (card.color === "black") return true;
+    if (card.color === currentColor) return true;
+    if (card.value === top.value) return true;
+    return false;
+}
+
+function playCard(p, i) {
+    if (!gameActive || p !== current || awaitingColor) return;
+
+    const card = players[p][i];
+    if (!valid(card)) return;
+
+    // Check for missed UNO declaration
+    if (players[p].length === 2 && !hasDeclaredUno[p]) {
+        showAIResponse("Haha! You forgot to say UNO. Draw 2!");
+        drawTo(p, 2);
+    }
+
+    players[p].splice(i, 1);
+    discard.push(card);
+
+    if (card.color !== "black") currentColor = card.color;
+
+    if (players[p].length === 0) {
+        endRound(p);
+        return;
+    }
+
+    handleAction(card, p);
+}
+
+function handleAction(card, p) {
+    const next = (p + 1) % 2;
+    switch (card.value) {
+        case "S":
+        case "R":
+            // Turn stays with current, basically skips next
+            break;
+        case "D2":
+            drawTo(next, 2);
+            break;
+        case "W":
+        case "W4":
+            if (card.value === "W4") drawTo(next, 4);
+            if (p === 0) showColorPicker();
+            else aiPickColor();
+            return;
+    }
+    current = next;
+    updateUI();
+}
+
+function drawFromDeck() {
+    if (!gameActive || current !== 0 || awaitingColor) return;
+    drawTo(0, 1);
+    current = 1;
+    updateUI();
+}
+
+function drawTo(p, n) {
+    for (let i = 0; i < n; i++) {
+        if (deck.length === 0) {
+            const top = discard.pop();
+            deck = [...discard].sort(() => Math.random() - 0.5);
+            discard = [top];
+        }
+        players[p].push(deck.pop());
+    }
+    hasDeclaredUno[p] = false;
+    updateUI();
+}
+
+function sayUno() {
+    if (current === 0 && players[0].length === 2) {
+        hasDeclaredUno[0] = true;
+        document.getElementById("status").innerText = "UNO DECLARED!";
+        setTimeout(updateUI, 1000);
+    }
+}
+
+/* ================= MODALS ================= */
+function showColorPicker() {
+    awaitingColor = true;
+    document.getElementById("colorPicker").style.display = "flex";
+}
+
+function setColor(c) {
+    currentColor = c;
+    awaitingColor = false;
+    document.getElementById("colorPicker").style.display = "none";
+    current = 1;
+    updateUI();
+}
+
+/* ================= AI LOGIC ================= */
+function aiTurn() {
+    const playable = players[1].map((c, i) => valid(c) ? i : -1).filter(i => i !== -1);
+    
+    // AI UNO Logic
+    if (players[1].length === 2) {
+        hasDeclaredUno[1] = true;
+        showAIResponse("UNO!");
+    }
+
+    if (playable.length > 0) {
+        const choice = playable[Math.floor(Math.random() * playable.length)];
+        playCard(1, choice);
+    } else {
+        drawTo(1, 1);
+        current = 0;
+        updateUI();
+    }
+}
+
+function aiPickColor() {
+    const counts = {};
+    players[1].forEach(c => { if(c.color !== "black") counts[c.color] = (counts[c.color] || 0) + 1; });
+    currentColor = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, "red");
+    current = 0;
+    updateUI();
+}
+
+/* ================= GEMINI INTEGRATION ================= */
+async function showAIResponse(manualMsg = null) {
+    const bubble = document.getElementById("ai-bubble");
+    bubble.style.display = "block";
+    
+    if (manualMsg) {
+        bubble.innerText = manualMsg;
+    } else {
+        const prompt = `Game State: I am an AI playing UNO. My hand size is ${players[1].length}. Human hand size is ${players[0].length}. The top card is ${currentColor} ${discard[discard.length-1].value}. Give a short (max 10 words) trash-talk or strategic comment.`;
+        const res = await callGemini(prompt, "You are a competitive and witty UNO tournament player.");
+        bubble.innerText = res || "My turn, human!";
+    }
+    
+    setTimeout(() => bubble.style.display = "none", 4000);
+}
+
+async function getStrategyAdvice() {
+    if (current !== 0 || !gameActive) return;
+    
+    const icon = document.getElementById("advice-icon");
+    const loader = document.getElementById("advice-loader");
+    const display = document.getElementById("advice-display");
+    
+    icon.classList.add("hidden");
+    loader.classList.remove("hidden");
+
+    const hand = players[0].map(c => `${c.color} ${c.value}`).join(", ");
+    const top = `${currentColor} ${discard[discard.length-1].value}`;
+    const prompt = `My UNO hand: [${hand}]. Top card: ${top}. Current color: ${currentColor}. What should I play and why? Be very brief (max 12 words).`;
+    
+    const advice = await callGemini(prompt, "You are a world-class UNO grandmaster strategist.");
+    
+    document.getElementById("status").innerText = advice || "Play a match or draw.";
+    
+    icon.classList.remove("hidden");
+    loader.classList.add("hidden");
+}
+
+/* ================= SCORING ================= */
+function endRound(winner) {
+    gameActive = false;
+    const loser = (winner + 1) % 2;
+    let pts = 0;
+    players[loser].forEach(c => {
+        if (!isNaN(c.value)) pts += parseInt(c.value);
+        else if (["S", "R", "D2"].includes(c.value)) pts += 20;
+        else pts += 50;
+    });
+    scores[winner] += pts;
+    localStorage.setItem('unoScores', JSON.stringify(scores));
+    
+    document.getElementById("status").innerText = `PLAYER ${winner+1} WINS ROUND! +${pts} pts`;
+    setTimeout(init, 3000);
+}
+
+function resetMatch() {
+    scores = [0, 0];
+    localStorage.removeItem('unoScores');
+    init();
+}
+
+init();
+
+</script>
+</body>
+</html>
