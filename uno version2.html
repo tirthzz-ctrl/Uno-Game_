@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNO Tournament Pro - Grandmaster Ultimate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            background: #020617;
+            font-family: 'Outfit', sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+
+        /* --- THEMES --- */
+        body.theme-noir { --bg-accent: #1e293b; --card-border: #fff; }
+        body.theme-neon { --bg-accent: #1e1b4b; --card-border: #22d3ee; }
+
+        .bg-gradient {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, var(--bg-accent, #1e293b) 0%, #020617 100%);
+            z-index: -1;
+            transition: all 0.8s ease;
+        }
+
+        /* --- HOME SCREEN --- */
+        #home-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(2, 6, 23, 0.9);
+            backdrop-filter: blur(25px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #home-screen.hidden { opacity: 0; pointer-events: none; transform: translateY(-50px); }
+
+        .title-glow {
+            font-size: 5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.05em;
+            background: linear-gradient(to bottom, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 30px rgba(255,255,255,0.2));
+            animation: title-float 4s ease-in-out infinite;
+        }
+
+        @keyframes title-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .mode-card, .diff-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.8rem 1.2rem;
+            border-radius: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .mode-card.active, .diff-card.active {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #facc15;
+            box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+        }
+
+        /* --- CARD STYLES --- */
+        .card {
+            width: 85px;
+            height: 130px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 26px;
+            border: 3px solid var(--card-border, white);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+            position: relative;
+            user-select: none;
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+            transform-origin: bottom center;
+        }
+
+        .card:hover {
+            transform: translateY(-90px) scale(1.4) rotate(0deg) !important;
+            z-index: 1000 !important;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.8), 0 0 20px rgba(255,255,255,0.4);
+        }
+
+        .card.playable::after {
+            content: ''; position: absolute; inset: -4px; border-radius: 14px;
+            border: 2px solid gold; animation: playable-pulse 1.5s infinite; pointer-events: none;
+        }
+
+        @keyframes playable-pulse { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
+
+        .card.gliding { position: fixed !important; z-index: 5000 !important; pointer-events: none !important; transition: all 0.6s cubic-bezier(0.19, 1, 0.22, 1) !important; }
+
+        .card.red { background: linear-gradient(135deg, #ef4444, #991b1b); }
+        .card.blue { background: linear-gradient(135deg, #3b82f6, #1e3a8a); }
+        .card.green { background: linear-gradient(135deg, #22c55e, #14532d); }
+        .card.yellow { background: linear-gradient(135deg, #eab308, #854d0e); color: #422006; }
+        .card.black { background: linear-gradient(135deg, #334155, #000000); }
+        .card.back { background: repeating-linear-gradient(45deg, #1e293b, #1e293b 10px, #0f172a 10px, #0f172a 20px); border-color: #334155; }
+
+        /* --- GAME UI --- */
+        .board {
+            height: 100vh;
+            display: grid;
+            grid-template-areas: ". top ." "left center right" ". bottom .";
+            grid-template-columns: 1.2fr 2fr 1.2fr;
+            grid-template-rows: 1fr 1.5fr 1fr;
+            align-items: center; padding: 20px; gap: 10px;
+        }
+
+        .hand { display: flex; justify-content: center; align-items: flex-end; height: 160px; width: 100%; position: relative; }
+        .active-player-glow { box-shadow: 0 0 100px rgba(255,255,255,0.05); background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%); border-radius: 50%; }
+
+        .indicator-ring { position: absolute; width: 220px; height: 220px; border-radius: 50%; border: 4px dashed rgba(255,255,255,0.05); transition: all 0.5s ease; }
+        .active-ring { border: 4px solid; box-shadow: 0 0 50px currentColor; animation: rotate-cw 10s linear infinite; }
+        .active-ring.reverse { animation: rotate-ccw 10s linear infinite; }
+
+        @keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes rotate-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+
+        .speech-bubble {
+            background: white; color: black; padding: 10px 16px; border-radius: 18px;
+            position: absolute; font-size: 12px; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            display: none; z-index: 50; width: max-content; max-width: 180px; top: -60px; animation: bubble-in 0.3s ease;
+        }
+
+        @keyframes bubble-in { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* --- MINI PLAYER & TIMER --- */
+        #mini-player {
+            position: absolute; bottom: 20px; left: 20px; display: flex; align-items: center; gap: 12px;
+            background: rgba(255, 255, 255, 0.05); padding: 12px 24px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        .avatar-circle {
+            width: 52px; height: 52px; background: linear-gradient(135deg, #facc15, #ca8a04);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; color: black; border: 3px solid rgba(255,255,255,0.2); font-size: 20px;
+        }
+
+        #timer-container { width: 120px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 6px; position: relative; }
+        #timer-bar { height: 100%; width: 100%; background: #facc15; transition: width 0.1s linear, background-color 0.3s; }
+
+        .bot-avatar { width: 40px; height: 40px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 2px solid rgba(255,255,255,0.1); margin-bottom: 8px; }
+
+        /* --- ACHIEVEMENTS --- */
+        .achievement-badge { background: gold; color: black; padding: 2px 8px; border-radius: 4px; font-size: 8px; font-weight: 900; text-transform: uppercase; margin-right: 4px; }
+
+        /* --- MODALS --- */
+        .glass-modal {
+            background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 2rem; padding: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 500px; width: 90%; text-align: center; max-height: 80vh; overflow-y: auto;
+        }
+
+        /* --- HUD --- */
+        #game-hud {
+            position: fixed; top: 0; left: 0; right: 0; padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center; z-index: 100; pointer-events: none;
+        }
+        #game-hud > * { pointer-events: auto; }
+
+        #music-toggle-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+            z-index: 200;
+            color: white;
+        }
+        #music-toggle-btn.playing {
+            color: #facc15;
+            box-shadow: 0 0 15px rgba(250, 204, 21, 0.3);
+            animation: pulse-music 2s infinite;
+        }
+
+        @keyframes pulse-music {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @media (max-width: 768px) { .card { width: 60px; height: 95px; font-size: 18px; } .board { grid-template-columns: 80px 1fr 80px; } #mini-player { display: none; } }
+    </style>
+</head>
+<body class="theme-noir">
+
+<!-- AUDIO ELEMENTS -->
+<audio id="bg-music" loop preload="auto">
+    <!-- Using a more robust Google Drive proxy format -->
+    <source id="music-source" src="https://drive.google.com/uc?export=download&id=1OvHKPp1zWP_aXQIsIqHUq1iKqIkf3uCZ" type="audio/mpeg">
+</audio>
+
+<div id="music-toggle-btn" onclick="AudioEngine.toggleMusic()" title="Toggle Background Music">🎵</div>
+
+<canvas id="confetti" class="fixed inset-0 pointer-events-none z-[5000]"></canvas>
+<div class="bg-gradient" id="game-bg"></div>
+
+<!-- HOME SCREEN -->
+<div id="home-screen">
+    <div class="title-glow mb-2 text-center">UNO PRO</div>
+    <div class="text-slate-400 uppercase tracking-[0.5em] text-xs font-bold mb-8">Ultimate Tournament Edition</div>
+    
+    <div class="flex flex-col gap-6 items-center max-w-4xl w-full px-6">
+        <div class="flex flex-col items-center bg-white/5 p-4 px-8 rounded-2xl border border-white/10 mb-2">
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Player Profile:</span>
+                <input type="text" id="player-name" class="bg-transparent border-none focus:ring-0 text-yellow-500 font-black uppercase text-lg w-48 outline-none text-center" value="Tirtharaj Dhar">
+            </div>
+            <div id="home-achievements" class="mt-2 flex gap-1"></div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+            <div class="space-y-4 text-center">
+                <span class="text-[10px] font-black uppercase text-slate-500 tracking-widest block">Match Logic</span>
+                <div class="grid grid-cols-2 gap-3">
+                    <div onclick="setMode('classic')" id="mode-classic" class="mode-card active"><div class="text-xs font-bold">Classic</div></div>
+                    <div onclick="setMode('duel')" id="mode-duel" class="mode-card"><div class="text-xs font-bold">Duel</div></div>
+                    <div onclick="setMode('speed')" id="mode-speed" class="mode-card"><div class="text-xs font-bold">Speed</div></div>
+                    <div onclick="setMode('chaos')" id="mode-chaos" class="mode-card"><div class="text-xs font-bold">Chaos</div></div>
+                </div>
+            </div>
+            <div class="space-y-4 text-center">
+                <span class="text-[10px] font-black uppercase text-slate-500 tracking-widest block">Bot Intelligence</span>
+                <div class="grid grid-cols-3 gap-3">
+                    <div onclick="setDifficulty('easy')" id="diff-easy" class="diff-card"><div class="text-xs font-bold">Easy</div></div>
+                    <div onclick="setDifficulty('medium')" id="diff-medium" class="diff-card active"><div class="text-xs font-bold">Medium</div></div>
+                    <div onclick="setDifficulty('hard')" id="diff-hard" class="diff-card"><div class="text-xs font-bold">Hard</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-4 items-center mt-4">
+            <button onclick="launchGame()" class="group relative px-24 py-5 bg-white text-black rounded-full font-black text-xl transition-all hover:scale-110 active:scale-95 overflow-hidden shadow-2xl">
+                <span class="relative z-10 uppercase italic">Start Arena</span>
+                <div class="absolute inset-0 bg-yellow-400 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+            </button>
+            <button onclick="toggleRuleBook()" class="bg-white/10 hover:bg-white/20 p-5 rounded-full transition-all">📖</button>
+            <button onclick="toggleSettings()" class="bg-white/10 hover:bg-white/20 p-5 rounded-full transition-all">⚙️</button>
+        </div>
+    </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settings-modal" class="fixed inset-0 z-[2000] hidden items-center justify-center bg-black/80 backdrop-blur-md">
+    <div class="glass-modal">
+        <h2 class="text-2xl font-black mb-8 uppercase italic">Tournament Options</h2>
+        <div class="space-y-4 mb-6">
+            <div class="flex justify-between items-center bg-white/5 p-4 rounded-xl">
+                <span class="text-xs font-bold uppercase tracking-widest">Deck Skin</span>
+                <select id="skin-select" onchange="applySkin(this.value)" class="bg-slate-800 border-none rounded-lg text-xs font-bold p-2 text-white outline-none">
+                    <option value="noir">Noir Pro</option>
+                    <option value="neon">Electric Neon</option>
+                </select>
+            </div>
+            <div class="flex justify-between items-center bg-white/5 p-4 rounded-xl">
+                <span class="text-xs font-bold uppercase tracking-widest">Master Volume</span>
+                <input type="range" id="vol-slider" min="0" max="1" step="0.1" value="0.5" oninput="AudioEngine.updateMasterVolume(this.value)" class="w-24 accent-yellow-500">
+            </div>
+            <div class="flex justify-between items-center bg-white/5 p-4 rounded-xl">
+                <span class="text-xs font-bold uppercase tracking-widest">Stacking Rule</span>
+                <input type="checkbox" id="rule-stacking" checked class="w-5 h-5 rounded bg-transparent border-white/20 text-yellow-500 focus:ring-0">
+            </div>
+        </div>
+        <button onclick="toggleSettings()" class="w-full py-4 bg-yellow-500 text-black rounded-xl font-black uppercase text-xs">Save Settings</button>
+    </div>
+</div>
+
+<!-- RULE BOOK -->
+<div id="rulebook-modal" class="fixed inset-0 z-[2000] hidden items-center justify-center bg-black/80 backdrop-blur-md">
+    <div class="glass-modal">
+        <h2 class="text-3xl font-black mb-6 uppercase italic text-yellow-500">Tournament Manual</h2>
+        <div class="space-y-6 text-left text-sm leading-relaxed text-slate-300">
+            <section><h3 class="font-black text-white uppercase mb-2 border-b border-white/10 pb-1">Turn Timer</h3><p>You have 15 seconds per turn. If the timer expires, the Bots will mock your reflexes and you will automatically draw a card and lose your turn.</p></section>
+            <section><h3 class="font-black text-white uppercase mb-2 border-b border-white/10 pb-1">Jump-In Rule</h3><p>If you have the exact same card (color & value) as the discard pile, click the card instantly to steal the turn!</p></section>
+        </div>
+        <button onclick="toggleRuleBook()" class="w-full mt-8 py-3 bg-white/10 rounded-xl font-bold uppercase text-[10px]">Close Manual</button>
+    </div>
+</div>
+
+<!-- MINI PLAYER HUD -->
+<div id="mini-player" class="hidden">
+    <div class="avatar-circle" id="avatar-letter">T</div>
+    <div class="flex flex-col">
+        <div class="flex items-center gap-1">
+            <span id="display-name" class="text-xs font-black uppercase text-yellow-500 tracking-wider">Tirtharaj Dhar</span>
+        </div>
+        <div id="hud-achievements" class="flex gap-0.5"></div>
+        <div id="timer-container"><div id="timer-bar"></div></div>
+    </div>
+</div>
+
+<!-- HUD -->
+<div id="game-hud" class="opacity-0 transition-opacity duration-500 pointer-events-none">
+    <div class="flex items-center gap-4">
+        <button onclick="openQuitModal()" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all">Exit Arena</button>
+        <div id="mode-indicator" class="text-[10px] font-black uppercase text-slate-500 tracking-tighter">CLASSIC</div>
+    </div>
+    <div id="score-hud" class="text-yellow-500 font-black text-sm tracking-widest">YOU: 0 | CPU: 0</div>
+</div>
+
+<div class="board">
+    <div id="opp-left-area" class="opp-left flex flex-col items-center relative"><div class="bot-avatar">🤖</div><div id="bubble-1" class="speech-bubble"></div><div id="p1-hand" class="hand"></div><div class="mt-4 text-[10px] font-black opacity-30 tracking-[0.2em]">Alpha-01</div></div>
+    <div id="opp-top-area" class="opp-top flex flex-col items-center relative"><div class="bot-avatar">⚡</div><div id="bubble-2" class="speech-bubble"></div><div id="p2-hand" class="hand"></div><div class="mt-4 text-[10px] font-black opacity-30 tracking-[0.2em]">Beta-02</div></div>
+    <div id="opp-right-area" class="opp-right flex flex-col items-center relative"><div class="bot-avatar">🔥</div><div id="bubble-3" class="speech-bubble"></div><div id="p3-hand" class="hand"></div><div class="mt-4 text-[10px] font-black opacity-30 tracking-[0.2em]">Gamma-03</div></div>
+
+    <div class="table-center flex flex-col items-center justify-center relative">
+        <div id="turn-ring" class="indicator-ring"></div>
+        <div class="flex gap-12 items-center z-10">
+            <div id="deck" class="card back flex flex-col items-center justify-center gap-1 shadow-2xl" onclick="drawFromDeck()">
+                <span class="text-[8px] opacity-50 uppercase font-black">Draw</span>
+                <div class="text-4xl">U</div>
+            </div>
+            <div class="relative">
+                <div id="stack-ui" class="stack-counter" style="background:#ef4444; color:white; font-weight:900; padding:4px 14px; border-radius:99px; font-size:14px; position:absolute; top:-30px; left:50%; transform:translateX(-50%); box-shadow:0 0 20px rgba(239, 68, 68, 0.6); display:none; z-index:20;">STACK: +0</div>
+                <div id="discard-target" class="absolute inset-0 pointer-events-none"></div>
+                <div id="discard" class="card shadow-2xl"></div>
+                <div id="color-name" class="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[10px] uppercase font-black opacity-40 tracking-[0.3em]"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="player-area" class="player-bottom flex flex-col items-center w-full">
+        <div class="flex gap-6 mb-3 items-center">
+            <button id="uno-btn" class="bg-yellow-500 text-black px-8 py-2 rounded-full font-black text-xs hidden shadow-lg" onclick="sayUno()">UNO!</button>
+            <div id="status" class="bg-white/5 border border-white/10 px-6 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-widest text-slate-300">Ready</div>
+            <button class="bg-slate-800 p-2.5 rounded-full text-xs shadow-lg" onclick="getStrategyAdvice()">💡 <div id="advice-loader" class="loader hidden"></div></button>
+            <button class="bg-slate-800 p-2.5 rounded-full text-xs shadow-lg" onclick="sortHand(0)">📊</button>
+        </div>
+        <div id="advice-display" class="text-[10px] text-purple-400 mb-3 italic h-4 font-bold"></div>
+        <div id="p0-hand" class="hand"></div>
+    </div>
+</div>
+
+<div id="colorPicker" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[2000] hidden items-center justify-center">
+    <div class="bg-slate-900 p-10 rounded-[2.5rem] border border-white/10 text-center shadow-2xl scale-in">
+        <h2 class="text-2xl font-black mb-8 uppercase italic tracking-tighter">Choose Your Color</h2>
+        <div class="grid grid-cols-2 gap-5">
+            <div class="w-24 h-24 rounded-3xl bg-red-500 cursor-pointer hover:scale-110" onclick="setColor('red')"></div>
+            <div class="w-24 h-24 rounded-3xl bg-blue-500 cursor-pointer hover:scale-110" onclick="setColor('blue')"></div>
+            <div class="w-24 h-24 rounded-3xl bg-green-500 cursor-pointer hover:scale-110" onclick="setColor('green')"></div>
+            <div class="w-24 h-24 rounded-3xl bg-yellow-400 cursor-pointer hover:scale-110" onclick="setColor('yellow')"></div>
+        </div>
+    </div>
+</div>
+
+<div id="quit-modal" class="fixed inset-0 z-[3000] hidden items-center justify-center bg-black/90 backdrop-blur-lg">
+    <div class="glass-modal">
+        <h2 class="text-2xl font-black mb-4 uppercase">Quit Arena?</h2>
+        <div class="flex gap-3"><button onclick="closeQuitModal()" class="flex-1 py-4 bg-white/10 rounded-2xl font-bold uppercase text-xs">Resume</button><button onclick="confirmQuit()" class="flex-1 py-4 bg-red-500 text-white rounded-2xl font-bold uppercase text-xs">Exit Game</button></div>
+    </div>
+</div>
+
+<div id="end-modal" class="fixed inset-0 bg-black/95 z-[4000] hidden items-center justify-center">
+    <div class="text-center">
+        <h2 id="end-title" class="text-7xl font-black italic uppercase tracking-tighter mb-4">VICTORY</h2>
+        <button onclick="resetRound()" class="px-16 py-4 bg-white text-black rounded-full font-black uppercase text-xl transition-all hover:scale-110">Continue</button>
+    </div>
+</div>
+
+<script>
+/* ================= AUDIO ENGINE ================= */
+const AudioEngine = (() => {
+    let ctx = null; 
+    const FALLBACK_MUSIC = "https://cdn.pixabay.com/audio/2024/02/12/audio_496a32d665.mp3";
+    
+    const initCtx = () => { 
+        if (!ctx) {
+            ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+    };
+    
+    function playNote(freq, type, duration, vol = 0.1) {
+        initCtx();
+        const volSlider = document.getElementById('vol-slider');
+        const masterVol = volSlider ? parseFloat(volSlider.value) : 0.5;
+        const osc = ctx.createOscillator(); 
+        const gain = ctx.createGain();
+        osc.type = type; 
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(vol * masterVol, ctx.currentTime); 
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        osc.connect(gain); 
+        gain.connect(ctx.destination);
+        osc.start(); 
+        osc.stop(ctx.currentTime + duration);
+    }
+
+    function updateMasterVolume(val) {
+        const bgMusic = document.getElementById('bg-music');
+        if (bgMusic) bgMusic.volume = val;
+    }
+
+    function toggleMusic() {
+        initCtx();
+        const m = document.getElementById('bg-music');
+        const btn = document.getElementById('music-toggle-btn');
+        if (m.paused) {
+            m.play().then(() => btn.classList.add('playing'))
+            .catch(err => {
+                console.log("Music failed, switching to fallback.");
+                m.src = FALLBACK_MUSIC;
+                m.play().then(() => btn.classList.add('playing'));
+            });
+        } else {
+            m.pause();
+            btn.classList.remove('playing');
+        }
+    }
+
+    return { 
+        card: () => playNote(600, 'sine', 0.1), 
+        draw: () => playNote(200, 'triangle', 0.2), 
+        special: () => playNote(1000, 'square', 0.1, 0.05), 
+        victory: () => [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => setTimeout(() => playNote(f, 'sine', 0.5), i * 100)),
+        updateMasterVolume,
+        initCtx,
+        toggleMusic
+    };
+})();
+
+/* ================= GAME STATE ================= */
+const apiKey = "";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+const COLORS = ["red", "blue", "green", "yellow"], VALUES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "S", "R", "D2"];
+let deck = [], discard = [], players = [[], [], [], []];
+let current = 0, direction = 1, currentColor = "", activeMode = 'classic', activeDifficulty = 'medium';
+let scores = [0, 0], gameActive = false, awaitingColor = false, stackCount = 0, hasDeclaredUno = [false, false, false, false];
+let turnTimer = null, timeLeft = 15, achievements = JSON.parse(localStorage.getItem('unoAchievs')) || {}, hasMocked = false;
+
+const houseRules = { stacking: true, jumpin: true, challenge: true };
+
+async function callGemini(prompt, systemInstruction) {
+    if(!apiKey) return null;
+    try {
+        const response = await fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: systemInstruction }] } }) });
+        const data = await response.json(); return data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } catch (e) { return null; }
+}
+
+/* ================= CORE LOGIC ================= */
+
+function applySkin(skin) { document.body.className = `theme-${skin}`; }
+function setMode(m) { activeMode = m; document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active')); document.getElementById(`mode-${m}`).classList.add('active'); }
+function setDifficulty(d) { activeDifficulty = d; document.querySelectorAll('.diff-card').forEach(c => c.classList.remove('active')); document.getElementById(`diff-${d}`).classList.add('active'); }
+function toggleRuleBook() { const m = document.getElementById('rulebook-modal'); m.classList.toggle('hidden'); m.classList.toggle('flex'); }
+function toggleSettings() { const m = document.getElementById('settings-modal'); m.classList.toggle('hidden'); m.classList.toggle('flex'); }
+
+function launchGame() {
+    AudioEngine.initCtx();
+    const pNameEl = document.getElementById('player-name');
+    const pName = pNameEl ? pNameEl.value : "Tirtharaj Dhar";
+    const displayNameEl = document.getElementById('display-name');
+    if (displayNameEl) displayNameEl.innerText = pName;
+    const avatar = document.getElementById('avatar-letter');
+    if (avatar) avatar.innerText = pName[0];
+    
+    // Background Music Start
+    const bgMusic = document.getElementById('bg-music');
+    const musicBtn = document.getElementById('music-toggle-btn');
+    if (bgMusic) {
+        bgMusic.volume = document.getElementById('vol-slider').value;
+        bgMusic.play().then(() => {
+            musicBtn.classList.add('playing');
+        }).catch(error => {
+            console.log("Interaction detected, but browser restricted playback. User must click music icon if silent.");
+        });
+    }
+
+    houseRules.stacking = document.getElementById('rule-stacking').checked;
+    document.getElementById('home-screen').classList.add('hidden');
+    document.getElementById('game-hud').classList.remove('opacity-0');
+    document.getElementById('game-hud').classList.add('opacity-100');
+    document.getElementById('mini-player').classList.remove('hidden');
+    updateAchievUI();
+    init();
+}
+
+function init() {
+    deck = [];
+    COLORS.forEach(c => { VALUES.forEach(v => { deck.push({ color: c, value: v }); if(v !== "0") deck.push({ color: c, value: v }); }); });
+    for (let i = 0; i < 4; i++) { deck.push({ color: "black", value: "W" }); deck.push({ color: "black", value: "W4" }); }
+    deck.sort(() => Math.random() - 0.5);
+    players = [[], [], [], []];
+    const cardsPerPlayer = activeMode === 'speed' ? 3 : 7;
+    for(let i=0; i<cardsPerPlayer; i++) players.forEach(p => p.push(deck.pop()));
+    let first = deck.pop(); while(first.color === "black") { deck.unshift(first); first = deck.pop(); }
+    discard = [first]; currentColor = first.color; current = 0; direction = 1; stackCount = 0; gameActive = true;
+    updateUI();
+}
+
+/* ================= TURN TIMER ================= */
+
+function startTurnTimer() {
+    clearInterval(turnTimer);
+    if (current !== 0 || !gameActive || awaitingColor) {
+        updateTimerBar(0);
+        return;
+    }
+    
+    timeLeft = 15;
+    hasMocked = false;
+    updateTimerBar(100);
+
+    turnTimer = setInterval(() => {
+        timeLeft -= 0.1;
+        const progress = (timeLeft / 15) * 100;
+        updateTimerBar(progress);
+
+        if (timeLeft <= 7 && !hasMocked) {
+            triggerMock();
+            hasMocked = true;
+        }
+
+        if (timeLeft <= 0) {
+            clearInterval(turnTimer);
+            handleTimeOut();
+        }
+    }, 100);
+}
+
+function updateTimerBar(pct) {
+    const bar = document.getElementById('timer-bar');
+    if (!bar) return;
+    bar.style.width = pct + "%";
+    bar.style.backgroundColor = pct < 30 ? "#ef4444" : "#facc15";
+}
+
+async function triggerMock() {
+    const botIdx = Math.floor(Math.random() * 3) + 1;
+    const prompt = "The player is taking forever to play UNO. Insult their speed in under 8 words.";
+    const response = await callGemini(prompt, "Competitive witty bot.");
+    showAIResponse(botIdx, response || "Hurry up, snail!");
+}
+
+function handleTimeOut() {
+    const status = document.getElementById("status");
+    if (status) status.innerText = "TIME OUT! DRAWING...";
+    drawTo(0, 1);
+    current = (current + direction + 4) % 4;
+    updateUI();
+}
+
+/* ================= GAMEPLAY ================= */
+
+function updateUI() {
+    const pNameEl = document.getElementById('player-name');
+    const pName = pNameEl ? pNameEl.value : "YOU";
+    const statusEl = document.getElementById("status");
+    if (statusEl) statusEl.innerText = current === 0 ? `${pName}'S TURN` : `BOT THINKING...`;
+    for(let i=0; i<4; i++) renderHand(i, `p${i}-hand`);
+    const top = discard[discard.length - 1];
+    const dEl = document.getElementById("discard");
+    if(top && dEl) { dEl.className = `card ${top.color}`; dEl.innerText = top.value; }
+    const ring = document.getElementById("turn-ring"); if(ring) { ring.style.color = getHexColor(currentColor); ring.className = `indicator-ring active-ring ${direction === -1 ? 'reverse' : ''}`; }
+    const unoBtn = document.getElementById("uno-btn");
+    if (unoBtn) unoBtn.style.display = (players[0].length === 2 && current === 0) ? "block" : "none";
+    
+    startTurnTimer();
+    if (gameActive && current !== 0 && !awaitingColor) setTimeout(aiTurn, 1500 + Math.random() * 1000);
+}
+
+function renderHand(pIdx, cId) {
+    const container = document.getElementById(cId); if(!container) return; container.innerHTML = "";
+    const cards = players[pIdx]; if (!cards) return;
+    let baseSpacing = pIdx === 0 ? 45 : 18;
+    cards.forEach((card, i) => {
+        const el = document.createElement('div');
+        const offset = (i - (cards.length-1)/2) * baseSpacing;
+        if(pIdx !== 0) el.className = "card back";
+        else {
+            el.className = `card ${card.color} ${current === 0 && isValid(card, 0) ? 'playable' : ''}`;
+            el.innerHTML = `<span>${card.value}</span>`; el.onclick = (ev) => playCardWithAnim(0, i, ev.target);
+        }
+        el.style.position = "absolute"; el.style.transform = `translateX(${offset}px) rotate(${(i - (cards.length-1)/2)*5}deg)`;
+        el.style.zIndex = i; container.appendChild(el);
+    });
+}
+
+function playCardWithAnim(p, i, element) {
+    if (!gameActive || p !== current || awaitingColor) return;
+    const card = players[p][i]; if (!isValid(card, p)) return;
+    
+    clearInterval(turnTimer);
+
+    const rect = element.getBoundingClientRect();
+    const clone = element.cloneNode(true);
+    clone.classList.add('gliding'); clone.style.top = rect.top + 'px'; clone.style.left = rect.left + 'px';
+    clone.style.width = rect.width + 'px'; clone.style.height = rect.height + 'px';
+    document.body.appendChild(clone);
+    element.style.opacity = '0';
+    setTimeout(() => {
+        const target = document.getElementById('discard').getBoundingClientRect();
+        clone.style.top = target.top + 'px'; clone.style.left = target.left + 'px'; clone.style.transform = 'rotate(15deg) scale(0.8)';
+        setTimeout(() => { clone.remove(); playCard(p, i); }, 600);
+    }, 10);
+}
+
+function isValid(card, pIdx) {
+    const top = discard[discard.length-1];
+    if (!top) return false;
+    if (houseRules.stacking && stackCount > 0) return (top.value === card.value && ["D2", "W4"].includes(card.value));
+    return (card.color === "black" || card.color === currentColor || card.value === top.value);
+}
+
+function playCard(p, i) {
+    const card = players[p].splice(i, 1)[0]; discard.push(card); AudioEngine.card();
+    if (card.color !== "black") currentColor = card.color;
+    if (players[p].length === 0) { endGame(p); return; }
+    handleAction(card, p);
+}
+
+function handleAction(card, p) {
+    let skip = false;
+    if (card.value === "D2") { stackCount += 2; if(stackCount > 2) unlockAchievement('Stack Lord'); }
+    else if (card.value === "W4") stackCount += 4;
+    else if (card.value === "S") skip = true; else if (card.value === "R") direction *= -1;
+    if (card.color === "black") { if(p === 0) { clearInterval(turnTimer); showColorPicker(); } else aiPickColor(p); return; }
+    if (skip) current = (current + direction + 4) % 4;
+    current = (current + direction + 4) % 4; updateUI();
+}
+
+function aiTurn() {
+    if (!gameActive) return;
+    const hand = players[current];
+    let pi = hand.map((c, i) => isValid(c, current) ? i : -1).filter(i => i !== -1);
+    if (pi.length > 0) playCard(current, pi[0]);
+    else { if (stackCount > 0) { drawTo(current, stackCount); stackCount = 0; } else drawTo(current, 1); current = (current + direction + 4) % 4; updateUI(); }
+}
+
+function aiPickColor(pIdx) {
+    const counts = {}; players[pIdx].forEach(c => { if(c.color !== "black") counts[c.color] = (counts[c.color] || 0) + 1; });
+    currentColor = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, COLORS[0]);
+    current = (current + direction + 4) % 4; updateUI();
+}
+
+function unlockAchievement(name) { if(!achievements[name]) { achievements[name] = true; localStorage.setItem('unoAchievs', JSON.stringify(achievements)); updateAchievUI(); } }
+function updateAchievUI() {
+    const containers = [document.getElementById('home-achievements'), document.getElementById('hud-achievements')];
+    containers.forEach(c => {
+        if(!c) return; c.innerHTML = "";
+        Object.keys(achievements).forEach(a => { const b = document.createElement('span'); b.className = 'achievement-badge'; b.innerText = a; c.appendChild(b); });
+    });
+}
+
+function drawTo(p, n) { for(let i=0; i<n; i++) { if(deck.length === 0) { let t = discard.pop(); if(discard.length) { deck = [...discard].sort(()=>Math.random()-.5); discard = [t]; } else return; } if(deck.length > 0) players[p].push(deck.pop()); } hasDeclaredUno[p] = false; updateUI(); }
+function drawFromDeck() { if (!gameActive || current !== 0 || awaitingColor) return; AudioEngine.draw(); if (stackCount > 0) { drawTo(0, stackCount); stackCount = 0; } else drawTo(0, 1); current = (current + direction + 4) % 4; updateUI(); }
+function sayUno() { if (current === 0 && players[0].length === 2) { hasDeclaredUno[0] = true; document.getElementById("status").innerText = "UNO!"; AudioEngine.special(); } }
+function showColorPicker() { awaitingColor = true; const cp = document.getElementById("colorPicker"); if(cp) { cp.classList.remove("hidden"); cp.classList.add("flex"); } }
+function setColor(c) { currentColor = c; awaitingColor = false; document.getElementById("colorPicker").classList.add('hidden'); current = (current + direction + 4) % 4; updateUI(); }
+function getHexColor(c) { return { 'red':'#ef4444', 'blue':'#3b82f6', 'green':'#22c55e', 'yellow':'#eab308' }[c] || '#fff'; }
+function openQuitModal() { document.getElementById('quit-modal').classList.remove('hidden'); document.getElementById('quit-modal').classList.add('flex'); }
+function closeQuitModal() { document.getElementById('quit-modal').classList.add('hidden'); }
+function confirmQuit() { location.reload(); }
+function sortHand(p) { players[p].sort((a,b) => (a.color > b.color) ? 1 : -1); updateUI(); }
+async function showAIResponse(pIdx, manual) { const b = document.getElementById(`bubble-${pIdx}`); if(!b) return; b.innerText = manual; b.style.display = "block"; setTimeout(()=>b.style.display="none", 3000); }
+async function getStrategyAdvice() {
+    if (current !== 0 || !gameActive) return;
+    const l = document.getElementById("advice-loader"); const d = document.getElementById("advice-display");
+    if(l) l.classList.remove('hidden');
+    const hand = players[0].map(c => `${c.color} ${c.value}`).join(", ");
+    const advice = await callGemini(`UNO context. Hand: [${hand}]. Advice?`, "Grandmaster Coach.");
+    if(d) d.innerText = advice || "Play smart!"; if(l) l.classList.add('hidden'); setTimeout(()=>{if(d)d.innerText="";}, 5000);
+}
+function endGame(w) {
+    gameActive = false; clearInterval(turnTimer); AudioEngine.victory();
+    if(w === 0 && activeMode === 'speed') unlockAchievement('Speed Demon');
+    const modal = document.getElementById('end-modal');
+    if(modal) { document.getElementById('end-title').innerText = w === 0 ? "VICTORY" : "DEFEAT"; modal.classList.remove('hidden'); modal.classList.add('flex'); }
+}
+function resetRound() { location.reload(); }
+function executeJumpIn() {}
+
+window.onload = () => { 
+    updateAchievUI(); 
+};
+</script>
+</body>
+</html>
